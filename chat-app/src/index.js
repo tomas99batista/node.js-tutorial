@@ -2,6 +2,11 @@ const path = require("path");
 const http = require("http");
 const express = require("express");
 const socketIo = require("socket.io");
+const Filter = require("bad-words");
+const {
+  generateMessage,
+  generateLocationMessage,
+} = require("./utils/messages");
 
 const app = express();
 const server = http.createServer(app);
@@ -12,15 +17,34 @@ const publicDirectoryPath = path.join(__dirname, "../public");
 
 app.use(express.static(publicDirectoryPath));
 
-let count = 0;
-
 io.on("connection", (socket) => {
   console.log("new WS");
-  socket.emit("countUpdated", { count });
 
-  socket.on("increment", () => {
-    count++;
-    io.emit("countUpdated", { count });
+  socket.emit("message", generateMessage("welcome!"));
+
+  socket.broadcast.emit("message", generateMessage("new user joined"));
+
+  socket.on("sendMessage", (message, callback) => {
+    const filter = new Filter();
+
+    if (filter.isProfane(message)) return callback("profanity not allowed");
+
+    io.emit("message", generateMessage(message));
+    callback();
+  });
+
+  socket.on("sendLocation", ({ latitude, longitude }, callback) => {
+    io.emit(
+      "locationMessage",
+      generateLocationMessage(
+        `https://www.google.com/maps?q=${latitude},${longitude}`
+      )
+    );
+    callback();
+  });
+
+  socket.on("disconnect", () => {
+    io.emit("message", generateMessage("user left"));
   });
 });
 
